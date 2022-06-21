@@ -32,9 +32,11 @@ COPY pkg/ pkg/
 
 FROM base AS tester
 ENV TEST_RESULTS /tmp/test-results
+
 RUN --mount=type=cache,target=/root/.cache/go-build \
     mkdir -p ${TEST_RESULTS} && \
-    gotestsum --junitfile ${TEST_RESULTS}/gotestsum-report.xml ./pkg/scalers/...
+    gotestsum --junitfile ${TEST_RESULTS}/gotestsum-report.xml \
+    $(go list ./... | grep -v pkg/scaling/cache | grep -v controllers/keda )
 
 FROM scratch as test-results
 COPY --from=tester /tmp/test-results/gotestsum-report.xml  .

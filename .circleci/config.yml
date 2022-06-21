@@ -53,7 +53,7 @@ jobs: # basic units of work in a run
       - run:
           name: export test results
           command: |
-            docker build . --target test-results . --progress=plain --output $TEST_RESULTS
+            docker build . --target test-results --progress=plain --output $TEST_RESULTS/
       - store_test_results: # upload test results for display in Test Summary
           path: /tmp/test-results
 
