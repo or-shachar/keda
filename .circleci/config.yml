@@ -8,7 +8,7 @@ jobs: # basic units of work in a run
       TEST_RESULTS: /tmp/test-results # path to where test results will be saved
       BIN_RESULTS: /tmp/bin
 
-    parallelism: 2
+    parallelism: 1
     steps: # steps that comprise the `build` job
       - checkout # check out source code to working directory
       - run: mkdir -p $TEST_RESULTS && mkdir -p $BIN_RESULTS # create the test results directory
@@ -21,8 +21,7 @@ jobs: # basic units of work in a run
           name: Run unit tests
           # store the results of our tests in the $TEST_RESULTS directory
           command: |
-            PACKAGE_NAMES=$(go list ./... | circleci tests split --split-by=timings --timings-type=classname)
-            gotestsum --junitfile ${TEST_RESULTS}/gotestsum-report.xml -- $PACKAGE_NAMES
+            gotestsum --junitfile ${TEST_RESULTS}/gotestsum-report.xml -- ./pkg/scalers/...
 
       - run:
           name: Go mod download
