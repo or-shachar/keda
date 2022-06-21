@@ -1,4 +1,35 @@
-version: 2
+version: 2.1
+commands:
+  build_docker_target:
+    parameters:
+      target:
+        type: string
+      cache_version:
+        type: string
+        default: v1
+    steps:
+      - restore_cache:
+          name: restore << parameters.target >> cache
+          keys:
+            - keda-<< parameters.target >>-<< parameters.cache_version >>-{{ .Branch }}
+            - keda-<< parameters.target >>-<< parameters.cache_version >>-main
+      - run:
+          name: maybe load cache
+          command: |
+            set +o pipefail
+            docker load -i /tmp/docker-caches/<< parameters.target >>.tar | true
+      - run:
+          name: build << parameters.target >>
+          command: docker build . --cache-from=keda:<< parameters.target >> --target << parameters.target >> -t keda:<< parameters.target >> --progress=plain
+      - run:
+          name: export << parameters.target >>
+          command: |
+            docker save -o /tmp/docker-caches/<< parameters.target >>.tar keda:<< parameters.target >>
+      - save_cache:
+          name: cache  << parameters.target >>
+          key: keda-<< parameters.target >>-<< parameters.cache_version >>-{{ .Branch }}-{{ epoch }}
+          paths:
+            - /tmp/docker-caches/<< parameters.target >>.tar
 jobs: # basic units of work in a run
   build: # runs not using Workflows must have a `build` job as entry point
     docker: # run the steps with Docker
@@ -17,25 +48,20 @@ jobs: # basic units of work in a run
           version: 20.10.14
       - run:
           name: prep dirs
-          command: mkdir -p $TEST_RESULTS && mkdir -p $BIN_RESULTS && mkdir -p $GO_MOD_CACHE
+          command: mkdir -p $TEST_RESULTS && mkdir /tmp/docker-caches
+      - build_docker_target:
+          target: base
+      - build_docker_target:
+          target: tester
+      - run:
+          name: export test results
+          command: |
+            docker build . --target test-results . --progress=plain --output $TEST_RESULTS
+      - store_test_results: # upload test results for display in Test Summary
+          path: /tmp/test-results
 
-      #      - restore_cache: # restores saved cache if no changes are detected since last run
-      #          keys:
-      #            - go-mod-v5-{{ checksum "go.sum" }}
-      - run:
-          name: base
-          command: docker build . --target base -t keda:base --progress=plain
-      - run:
-          name: test
-          command: docker build . --cache-from keda:base --target tester -t keda:tester --progress=plain
-      - run:
-          name: build
-          command: docker build . --cache-from keda:base -t keda:final --progress=plain
-
-#      - save_cache:
-#          key: go-mod-v5-{{ checksum "go.sum" }}
-#          paths:
-#            - "/go/pkg/mod"
+      - build_docker_target:
+          target: bin
 
 workflows:
   version: 2

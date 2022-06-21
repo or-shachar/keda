@@ -36,6 +36,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     mkdir -p ${TEST_RESULTS} && \
     gotestsum --junitfile ${TEST_RESULTS}/gotestsum-report.xml ./pkg/scalers/...
 
+FROM scratch as test-results
+COPY --from=tester /tmp/test-results/gotestsum-report.xml  .
 
 FROM base as builder
 # Build
@@ -53,7 +55,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/static:nonroot as bin
 WORKDIR /
 COPY --from=builder /workspace/bin/keda .
 # 65532 is numeric for nonroot
