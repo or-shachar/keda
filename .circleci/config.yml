@@ -8,7 +8,7 @@ jobs: # basic units of work in a run
       TEST_RESULTS: /tmp/test-results # path to where test results will be saved
       BIN_RESULTS: /tmp/bin
       GO_MOD_CACHE: /tmp/go/pkg/mod
-
+      DOCKER_BUILDKIT: 1
     parallelism: 1
     steps:
       - checkout
@@ -22,10 +22,15 @@ jobs: # basic units of work in a run
       #      - restore_cache: # restores saved cache if no changes are detected since last run
       #          keys:
       #            - go-mod-v5-{{ checksum "go.sum" }}
-
+      - run:
+          name: base
+          command: docker build . --target base -t keda:base --progress=plain
+      - run:
+          name: test
+          command: docker build . --cache-from keda:base --target tester -t keda:tester --progress=plain
       - run:
           name: build
-          command: DOCKER_BUILDKIT=1 docker build . -t keda --progress=plain
+          command: docker build . --cache-from keda:base -t keda:final --progress=plain
 
 #      - save_cache:
 #          key: go-mod-v5-{{ checksum "go.sum" }}

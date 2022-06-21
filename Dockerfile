@@ -1,5 +1,10 @@
+# syntax = docker/dockerfile:1.4
+
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.17.9 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.17.9 AS base
+
+# install tools
+RUN go install gotest.tools/gotestsum@latest
 
 ARG BUILD_VERSION=main
 ARG GIT_COMMIT=HEAD
@@ -12,8 +17,7 @@ COPY go.mod go.mod
 COPY go.sum go.sum
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
-RUN go mod download
-
+RUN go mod download 
 COPY Makefile Makefile
 
 # Copy the go source
@@ -25,11 +29,27 @@ COPY apis/ apis/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
 
+
+FROM base AS tester
+ENV TEST_RESULTS /tmp/test-results
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p ${TEST_RESULTS} && \
+    gotestsum --junitfile ${TEST_RESULTS}/gotestsum-report.xml ./pkg/scalers/...
+
+
+FROM base as builder
 # Build
 # https://www.docker.com/blog/faster-multi-platform-builds-dockerfile-cross-compilation-guide/
 ARG TARGETOS
 ARG TARGETARCH
-RUN VERSION=${BUILD_VERSION} GIT_COMMIT=${GIT_COMMIT} GIT_VERSION=${GIT_VERSION} TARGET_OS=$TARGETOS ARCH=$TARGETARCH make manager
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    VERSION=${BUILD_VERSION} \
+    GIT_COMMIT=${GIT_COMMIT} \
+    GIT_VERSION=${GIT_VERSION} \
+    TARGET_OS=$TARGETOS \
+    ARCH=$TARGETARCH \
+    make manager
+
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
