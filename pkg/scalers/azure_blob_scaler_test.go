@@ -125,6 +125,7 @@ func TestAzBlobGetMetricSpecForScaling(t *testing.T) {
 		ctx := context.Background()
 		meta, podIdentity, err := parseAzureBlobMetadata(&ScalerConfig{TriggerMetadata: testData.metadataTestData.metadata, ResolvedEnv: testData.metadataTestData.resolvedEnv, AuthParams: testData.metadataTestData.authParams, PodIdentity: testData.metadataTestData.podIdentity, ScalerIndex: testData.scalerIndex})
 		if err != nil {
+			t.Log("I am a new line\n")
 			t.Fatal("Could not parse metadata:", err)
 		}
 		mockAzBlobScaler := azureBlobScaler{
