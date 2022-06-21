@@ -3,41 +3,34 @@ jobs: # basic units of work in a run
   build: # runs not using Workflows must have a `build` job as entry point
     docker: # run the steps with Docker
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
-      - image: cimg/go:1.17
+      - image: cimg/base:2022.06
     environment: # environment variables for the build itself
       TEST_RESULTS: /tmp/test-results # path to where test results will be saved
       BIN_RESULTS: /tmp/bin
+      GO_MOD_CACHE: /tmp/go/pkg/mod
 
     parallelism: 1
-    steps: # steps that comprise the `build` job
-      - checkout # check out source code to working directory
-      - run: mkdir -p $TEST_RESULTS && mkdir -p $BIN_RESULTS # create the test results directory
-
-      - restore_cache: # restores saved cache if no changes are detected since last run
-          keys:
-            - go-mod-v4-{{ checksum "go.sum" }}
-
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: false
+          version: 20.10.14
       - run:
-          name: Run unit tests
-          # store the results of our tests in the $TEST_RESULTS directory
-          command: |
-            gotestsum --junitfile ${TEST_RESULTS}/gotestsum-report.xml -- ./pkg/scalers/...
+          name: prep dirs
+          command: mkdir -p $TEST_RESULTS && mkdir -p $BIN_RESULTS && mkdir -p $GO_MOD_CACHE
 
-      - run:
-          name: Go mod download
-          command: go mod download
-
-      - save_cache:
-          key: go-mod-v4-{{ checksum "go.sum" }}
-          paths:
-            - "/go/pkg/mod"
+      #      - restore_cache: # restores saved cache if no changes are detected since last run
+      #          keys:
+      #            - go-mod-v5-{{ checksum "go.sum" }}
 
       - run:
           name: build
-          command: go build -o $BIN_RESULTS/keda
+          command: DOCKER_BUILDKIT=1 docker build . -t keda --progress=plain
 
-      - store_test_results: # upload test results for display in Test Summary
-          path: /tmp/test-results
+#      - save_cache:
+#          key: go-mod-v5-{{ checksum "go.sum" }}
+#          paths:
+#            - "/go/pkg/mod"
 
 workflows:
   version: 2
