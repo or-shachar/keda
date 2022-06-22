@@ -1,69 +1,63 @@
-version: 2.1
-commands:
-  build_docker_target:
-    parameters:
-      target:
-        type: string
-      cache_version:
-        type: string
-        default: v1
-    steps:
-      - run:
-          name: maybe load cache
-          command: |
-            set +o pipefail
-            docker pull $REGISTRY_URL/keda:<< parameters.target >> --quiet || true
-      - run:
-          name: build << parameters.target >>
-          command: docker build . --build-arg BUILDKIT_INLINE_CACHE=1 --cache-from=$REGISTRY_URL/keda:<< parameters.target >> --target << parameters.target >> -t keda:<< parameters.target >> --progress=plain
-      - run:
-          name: export << parameters.target >>
-          command: |
-            set +o pipefail
-            docker tag keda:<< parameters.target >> $REGISTRY_URL/keda:<< parameters.target >> 
-            docker push $REGISTRY_URL/keda:<< parameters.target >> --quiet || true
-
+version: 2
 jobs: # basic units of work in a run
   build: # runs not using Workflows must have a `build` job as entry point
     docker: # run the steps with Docker
       # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
-      - image: cimg/base:2022.06
+      - image: cimg/go:1.17
     environment: # environment variables for the build itself
       TEST_RESULTS: /tmp/test-results # path to where test results will be saved
       BIN_RESULTS: /tmp/bin
-      GO_MOD_CACHE: /tmp/go/pkg/mod
-      DOCKER_BUILDKIT: 1
-      REGISTRY_URL: ghcr.io/or-shachar
+
     parallelism: 1
-    steps:
-      - checkout
-      - setup_remote_docker:
-          docker_layer_caching: false
-          version: 20.10.14
+    steps: # steps that comprise the `build` job
+      - checkout # check out source code to working directory
       - run:
-          name: docker login
-          command: echo $GITHUB_TOKEN |  docker login ghcr.io -u USERNAME --password-stdin
-      - run:
-          name: prep dirs
-          command: mkdir -p $TEST_RESULTS && mkdir /tmp/docker-caches
-      - build_docker_target:
-          target: base
-      - build_docker_target:
-          target: tester
-      - run:
-          name: export test results
+          name: prep
           command: |
-            docker build . --target test-results --progress=plain --output $TEST_RESULTS/
+            mkdir -p $TEST_RESULTS
+            mkdir -p $BIN_RESULTS 
+            date +%F | tee /tmp/daily-date
+
+      - restore_cache: # restores saved cache if no changes are detected since last run
+          keys:
+            - go-mod-v4-{{ checksum "go.sum" }}
+
+      - restore_cache: # restores saved cache if no changes are detected since last run
+          keys:
+            - go-cache-v4-{{ checksum "/tmp/daily-date" }}
+
+      - run:
+          name: Run unit tests
+          # store the results of our tests in the $TEST_RESULTS directory
+          command: |
+            gotestsum --junitfile ${TEST_RESULTS}/gotestsum-report.xml -- $(go list ./... | grep -v pkg/scaling/cache | grep -v controllers/keda )
+
+      - run:
+          name: Go mod download
+          command: go mod download
+
+      - save_cache:
+          key: go-mod-v4-{{ checksum "go.sum" }}
+          paths:
+            - "/go/pkg/mod"
+
+      - run:
+          name: build
+          command: |
+            go build -o $BIN_RESULTS/keda
+            mkdir -p /tmp/cache_date
+            echo date
+
+      - save_cache:
+          key: go-cache-v4-{{ checksum "/tmp/daily-date" }}
+          paths:
+            - ~/.cache/go-build
+
       - store_test_results: # upload test results for display in Test Summary
           path: /tmp/test-results
-
-      - build_docker_target:
-          target: bin
 
 workflows:
   version: 2
   build-workflow:
     jobs:
-      - build:
-          context:
-            - ghcr_private
+      - build
